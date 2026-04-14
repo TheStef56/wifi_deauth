@@ -129,7 +129,7 @@ class WiFiDeauth():
     def check_existing(self):
         APs = [(ap["mac"], ap["ch"], ap["ssid"]) for ap in self._ap_found]
         self._existing_aps = []
-        for _, ch in APs:
+        for _, ch, _ in APs:
             self.set_channel(ch)
             sniff(prn = self._exists_cb, iface=self.interface, timeout=self.checking_timeout)
         for mac_ch in APs:
@@ -154,7 +154,12 @@ class WiFiDeauth():
                     break
                 print("AP NOT FOUND IN DISCOVERED APs! Sniffing again...")
                 self.sniff_for_aps()
-            
+            print("APs found with matching ssid:")
+            for ap in self._ap_found:
+                mac = ap["mac"]
+                ch = ap["ch"]
+                band = ap["band"]
+                print(f"    mac: {mac} channel: {ch} ({band})")
             while True:
                 for _ in range(self.attacks_before_check):
                     for ap in self._ap_found:
