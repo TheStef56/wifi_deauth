@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 
 import argparse, os, time, sys
 from scapy.layers.dot11 import RadioTap, Dot11Elt, Dot11Beacon, Dot11ProbeResp, Dot11ReassoResp, Dot11AssoResp, Dot11QoS, Dot11Deauth, Dot11
